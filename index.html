@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>AI 全曲轉譜視覺化 - 記憶體優化版</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.39.0/build/stlite.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.39.0/build/stlite.js"></script>
+    <script>
+      stlite.mount({
+        requirements: ["basic-pitch", "librosa", "pandas", "altair", "pretty_midi"], 
+        entrypoint: "app.py",
+        files: {
+          "app.py": `
+import streamlit as st
+from basic_pitch.inference import predict
+import io
+import librosa
+import pandas as pd
+import altair as alt
+import pretty_midi
+import numpy as np
+import gc  # 導入垃圾回收模組
+
+st.set_page_config(page_title="AI 鋼琴轉譜 (長曲支援)", layout="wide")
+st.title("🎹 AI 全曲自動轉譜系統")
+st.markdown("本版本支援長歌曲處理，並整合了**自動記憶體回收機制**。")
+
+uploaded_file = st.file_uploader("上傳音樂檔案 (建議 5 分鐘內)", type=["mp3", "wav"])
+
+if uploaded_file:
+    st.audio(uploaded_file)
+    
+    if st.button("開始分段解析"):
+        try:
+            # 1. 初始化環境
+            with st.spinner("正在加載音訊..."):
+                y_full, sr = librosa.load(io.BytesIO(uploaded_file.read()), sr=22050)
+                duration = librosa.get_duration(y=y_full, sr=sr)
+            
+            # 2. 設定分段參數
+            chunk_size = 30  # 每 30 秒一個切片
+            num_chunks = int(np.ceil(duration / chunk_size))
+            
+            # 初始化 MIDI 容器
+            final_midi = pretty_midi.PrettyMIDI()
+            piano = pretty_midi.Instrument(program=0) # Acoustic Grand Piano
+            final_midi.instruments.append(piano)
+            
+            all_notes_for_viz = []
+            progress_bar = st.progress(0)
+            status = st.empty()
+
+            from basic_pitch import ICASSP_2022_MODEL_PATH
+            
+            # 3. 分段循環處理 (核心優化流程)
+            for i in range(num_chunks):
+                start_sec = i * chunk_size
+                end_sec = min((i + 1) * chunk_size, duration)
+                status.text(f"正在處理第 {i+1}/{num_chunks} 段 ({start_sec}s - {end_sec}s)")
+
+                # 擷取音訊切片
+                y_chunk = y_full[int(start_sec * sr):int(end_sec * sr)]
+                
+                # AI 推論
+                _, midi_chunk, note_events = predict(ICASSP_2022_MODEL_PATH, y_chunk)
+                
+                # 將音符加入主 MIDI 軌道並修正時間偏移
+                for instrument in midi_chunk.instruments:
+                    for note in instrument.notes:
+                        note.start += start_sec
+                        note.end += start_sec
+                        piano.notes.append(note)
+                
+                # 收集視覺化數據 (僅收集前段用於展示)
+                if i < 2: # 為了節省網頁效能，僅視覺化前一分鐘
+                    for n in note_events:
+                        all_notes_for_viz.append({
+                            'start': n[0] + start_sec,
+                            'pitch': n[2],
+                            'velocity': n[3]
+                        })
+
+                # --- 記憶體回收關鍵步驟 ---
+                del y_chunk
+                del midi_chunk
+                del note_events
+                gc.collect() # 強制回收此循環產生的垃圾
+                # -----------------------
+
+                progress_bar.progress((i + 1) / num_chunks)
+
+            # 4. 輸出結果
+            st.success("✅ 處理完成！")
+            
+            # 顯示部分視覺化
+            df = pd.DataFrame(all_notes_for_viz)
+            chart = alt.Chart(df).mark_circle().encode(
+                x='start:Q', y='pitch:Q', color='velocity:Q'
+            ).properties(height=300).interactive()
+            st.altair_chart(chart, use_container_width=True)
+
+            # 下載完整 MIDI
+            midi_io = io.BytesIO()
+            final_midi.write(midi_io)
+            st.download_button("📥 下載完整 MIDI 檔案", midi_io.getvalue(), "full_score.mid")
+
+            # 清理大變數
+            del y_full
+            gc.collect()
+
+        except Exception as e:
+            st.error(f"發生錯誤: {e}")
+          `,
+        },
+      }, document.getElementById("root"));
+    </script>
+  </body>
+</html>
