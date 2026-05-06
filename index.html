@@ -1,52 +1,36 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>AI Piano Transcriber</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.39.0/build/stlite.css" />
-    <style>
-      #loader {
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        height: 100vh; font-family: sans-serif; background: #ffffff;
-      }
-      .progress-bg { width: 280px; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin-top: 20px; }
-      .progress-fill { width: 0%; height: 100%; background: #1DB954; transition: width 0.5s; }
-      .status-msg { margin-top: 15px; color: #555; font-size: 14px; }
-      .sub-msg { margin-top: 5px; color: #999; font-size: 11px; }
-    </style>
-  </head>
-  <body>
-    <div id="loader">
-      <h2 style="margin:0; color:#31333F;">AI 轉譜系統啟動中</h2>
-      <div class="progress-bg"><div id="fill" class="progress-fill"></div></div>
-      <div id="status" class="status-msg">正在下載 AI 模型...</div>
-      <div id="sub-status" class="sub-msg">首次啟動較慢，請保持網頁開啟</div>
-    </div>
-    <div id="root"></div>
-    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.39.0/build/stlite.js"></script>
-    <script>
-      const fill = document.getElementById("fill");
-      const status = document.getElementById("status");
-      let p = 0;
-      
-      const interval = setInterval(() => {
-        if (p < 60) {
-          p += 2;
-          status.innerText = "正在載入 Python 核心資源...";
-        } else if (p < 85) {
-          p += 0.5;
-          status.innerText = "正在下載 AI 辨識模型 (60MB)...";
-        } else if (p < 98) {
-          p += 0.1;
-          status.innerText = "正在初始化模型權重與記憶體 (此步較久)...";
-        }
-        fill.style.width = p + "%";
-      }, 400);
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Piano Transcriber</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.39.0/build/stlite.css" />
+</head>
+<body>
+  <!-- 最基礎的載入狀態文字 -->
+  <div id="loading" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; font-family:sans-serif;">
+    <h3 id="status">正在加載 AI 鋼琴辨識環境...</h3>
+    <p style="color:#888; font-size:14px;">下載模型約 60MB，請勿關閉網頁</p>
+  </div>
 
-      stlite.mount({
-        requirements: ["basic-pitch", "librosa", "pandas", "altair", "pretty_midi"], 
-        entrypoint: "app.py",
-      }, document.getElementById("root"));
-    </script>
-  </body>
+  <div id="root"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.39.0/build/stlite.js"></script>
+  <script>
+    // 啟動 stlite
+    stlite.mount({
+      requirements: ["basic-pitch", "librosa", "pandas", "altair", "pretty_midi"],
+      entrypoint: "app.py",
+    }, document.getElementById("root"));
+
+    // 每 5 秒自動更新一下狀態文字，讓你知道它沒當機
+    const states = ["正在下載模型權重...", "正在初始化 Python...", "正在分配記憶體...", "即時解析環境準備中..."];
+    let i = 0;
+    setInterval(() => {
+      const statusEl = document.getElementById("status");
+      if (statusEl) statusEl.innerText = states[i % states.length];
+      i++;
+    }, 5000);
+  </script>
+</body>
 </html>
