@@ -2,13 +2,35 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>AI Piano Transcriber Pro</title>
+    <title>AI Piano Transcriber</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.39.0/build/stlite.css" />
+    <style>
+      #loader {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        height: 100vh; font-family: sans-serif;
+      }
+      .progress-bg { width: 250px; height: 10px; background: #eee; border-radius: 5px; overflow: hidden; margin-top: 20px; }
+      .progress-fill { width: 0%; height: 100%; background: #1DB954; transition: width 0.4s; }
+    </style>
   </head>
   <body>
+    <div id="loader">
+      <h2 id="msg">正在初始化 AI 環境...</h2>
+      <div class="progress-bg"><div id="fill" class="progress-fill"></div></div>
+      <p style="font-size: 12px; color: #888;">首次啟動需下載約 60MB 資源，請稍候</p>
+    </div>
     <div id="root"></div>
     <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.39.0/build/stlite.js"></script>
     <script>
+      const fill = document.getElementById("fill");
+      let p = 0;
+      const interval = setInterval(() => {
+        if (p < 95) {
+          p += (95 - p) * 0.1; // 越接近 95% 越慢，模擬真實下載感
+          fill.style.width = p + "%";
+        }
+      }, 500);
+
       stlite.mount({
         requirements: ["basic-pitch", "librosa", "pandas", "altair", "pretty_midi"], 
         entrypoint: "app.py",
