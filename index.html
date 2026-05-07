@@ -7,24 +7,28 @@
   <style>
     body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
     #app-card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
-    .btn { background: #1DB954; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; }
-    .btn:disabled { background: #ccc; }
-    #status { margin: 1rem 0; color: #555; font-size: 14px; }
-    .progress-bg { background: #eee; height: 8px; border-radius: 4px; overflow: hidden; display: none; }
-    #progress-fill { background: #1DB954; width: 0%; height: 100%; transition: width 0.3s; }
+    .btn { background: #1DB954; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; transition: 0.3s; }
+    .btn:disabled { background: #ccc; cursor: not-allowed; }
+    #status-msg { margin: 1rem 0; color: #555; font-size: 14px; font-weight: bold; }
+    .progress-bg { background: #eee; height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 10px; }
+    #progress-fill { background: #1DB954; width: 0%; height: 100%; transition: width 0.4s ease-out; }
+    .stage-hint { font-size: 11px; color: #999; margin-top: 5px; }
   </style>
 </head>
 <body>
 
   <div id="app-card">
-    <h2>🎹 AI 鋼琴轉譜</h2>
-    <div id="status">正在建立 AI 核心...</div>
-    <div class="progress-bg" id="pg-box"><div id="progress-fill"></div></div>
-    <br>
+    <h2 style="margin-top:0;">🎹 AI 鋼琴轉譜</h2>
+    
+    <div class="progress-bg"><div id="progress-fill"></div></div>
+    <div id="status-msg">正在準備系統...</div>
+    <div id="stage-info" class="stage-hint">初始化中</div>
+
     <input type="file" id="audio-file" style="display:none" accept="audio/*">
-    <button id="main-btn" class="btn" disabled>初始化中...</button>
+    <button id="main-btn" class="btn" disabled>請稍候...</button>
+    
     <div id="download-area" style="margin-top:20px; display:none">
-        <a id="midi-link" href="#" style="color:#1DB954; font-weight:bold; text-decoration:none">📥 下載 MIDI 結果</a>
+        <a id="midi-link" href="#" style="color:#1DB954; font-weight:bold; text-decoration:none; border: 2px solid #1DB954; padding: 10px; border-radius: 5px; display: block;">📥 下載 MIDI 結果</a>
     </div>
   </div>
 
@@ -33,11 +37,29 @@
   <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.39.0/build/stlite.js"></script>
   <script>
     const btn = document.getElementById('main-btn');
-    const status = document.getElementById('status');
-    const pgBox = document.getElementById('pg-box');
+    const statusMsg = document.getElementById('status-msg');
+    const stageInfo = document.getElementById('stage-info');
     const pgFill = document.getElementById('progress-fill');
 
-    // 啟動一個「空UI」的 stlite
+    // --- 初始化進度模擬邏輯 ---
+    let initPercent = 0;
+    const initInterval = setInterval(() => {
+      if (initPercent < 30) {
+        initPercent += 1;
+        statusMsg.innerText = "Step 1/4: 下載 Python 核心...";
+        stageInfo.innerText = "正在從 CDN 獲取 WASM 資源";
+      } else if (initPercent < 65) {
+        initPercent += 0.5;
+        statusMsg.innerText = "Step 2/4: 載入 AI 預訓練模型...";
+        stageInfo.innerText = "正在加載 Basic Pitch 模型 (約 60MB)";
+      } else if (initPercent < 90) {
+        initPercent += 0.2;
+        statusMsg.innerText = "Step 3/4: 配置虛擬環境...";
+        stageInfo.innerText = "正在瀏覽器內建立虛擬檔案系統";
+      }
+      pgFill.style.width = initPercent + "%";
+    }, 300);
+
     const mount = stlite.mount({
       requirements: ["basic-pitch", "librosa", "pretty_midi"],
       entrypoint: "main.py",
@@ -48,6 +70,7 @@ from basic_pitch.inference import predict
 from basic_pitch import ICASSP_2022_MODEL_PATH
 
 async def run_ai(data):
+    # 此處邏輯與之前相同，處理 5 分鐘歌曲的分段回收
     y, sr = librosa.load(io.BytesIO(data.to_py()), sr=22050)
     duration = librosa.get_duration(y=y, sr=sr)
     chunk_size = 30
@@ -59,7 +82,7 @@ async def run_ai(data):
 
     for i in range(num_chunks):
         s, e = i*chunk_size, min((i+1)*chunk_size, duration)
-        js.updateUI(f"辨識中: {s}s-{e}s", int((i+1)/num_chunks*100))
+        js.updateProgressUI(f"辨識中: {s}s-{e}s", int((i+1)/num_chunks*100))
         
         y_c = y[int(s*sr):int(e*sr)]
         _, mc, _ = predict(ICASSP_2022_MODEL_PATH, y_c)
@@ -77,22 +100,30 @@ async def run_ai(data):
 `
       },
       onMount: () => {
-        status.innerText = "✅ 環境已就緒";
-        btn.innerText = "選擇音檔並轉譜";
+        // --- 初始化完成 ---
+        clearInterval(initInterval);
+        pgFill.style.width = "100%";
+        statusMsg.innerText = "Step 4/4: 系統就緒！";
+        stageInfo.innerText = "已完成所有組件部署";
+        btn.innerText = "點此選擇音檔並轉譜";
         btn.disabled = false;
+        setTimeout(() => {
+            pgFill.parentElement.style.display = 'none'; // 就緒後隱藏進度條，等待轉譜時再出現
+        }, 1000);
       }
     }, document.getElementById("stlite-container"));
 
-    // JS 交互
+    // 交互邏輯
     btn.onclick = () => document.getElementById('audio-file').click();
-
     document.getElementById('audio-file').onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
 
       btn.disabled = true;
-      pgBox.style.display = 'block';
-      status.innerText = "讀取音訊中...";
+      pgFill.parentElement.style.display = 'block';
+      pgFill.style.width = "0%";
+      statusMsg.innerText = "正在讀取音軌...";
+      stageInfo.innerText = "準備進行分段 AI 辨識";
 
       const buf = await file.arrayBuffer();
       try {
@@ -102,16 +133,20 @@ async def run_ai(data):
         const url = URL.createObjectURL(new Blob([res], {type:'audio/midi'}));
         document.getElementById('midi-link').href = url;
         document.getElementById('download-area').style.display = 'block';
-        status.innerText = "🎉 轉譜完成！";
+        statusMsg.innerText = "🎉 轉譜成功！";
+        stageInfo.innerText = "您可以下載 MIDI 檔案了";
       } catch (err) {
-        status.innerText = "❌ 發生錯誤: " + err;
+        statusMsg.innerText = "❌ 處理失敗";
+        stageInfo.innerText = err;
         btn.disabled = false;
       }
     };
 
-    window.updateUI = (msg, val) => {
-        status.innerText = msg;
+    // 供 Python 呼叫以更新轉譜進度
+    window.updateProgressUI = (msg, val) => {
+        statusMsg.innerText = msg;
         pgFill.style.width = val + "%";
+        stageInfo.innerText = "正在執行分段運算與記憶體回收...";
     };
   </script>
 </body>
